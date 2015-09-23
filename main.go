@@ -31,8 +31,8 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
-	"fmt"
 	"html/template"
+	"log"
 	"net"
 	"os"
 	"os/exec"
@@ -49,20 +49,24 @@ import (
 var (
 	errPerm   = errors.New("config file should't read or write by others.")
 	errConfig = errors.New("config file wrong")
+
+	Info   = log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
+	ErrLog = log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
 )
 
 type Config struct {
-	Secret    string
-	Emergency []string
-	Addr      string
-	OpenCmd   string
-	CloseCmd  string
-	Interval  uint16
+	Secret       string
+	Emergency    []string
+	EmergencySet map[string]struct{} `json:"-"`
+	Addr         string
+	OpenCmd      string
+	CloseCmd     string
+	Interval     uint32
 }
 
 var cfg *Config = nil
 
-func LoadConfig() (cfg Config, err error) {
+func LoadConfig() (cfg *Config, err error) {
 	var configfile string
 	flag.StringVar(&configfile, "config", "/etc/otpknock.json", "config file")
 	flag.Parse()
@@ -84,8 +88,9 @@ func LoadConfig() (cfg Config, err error) {
 		return
 	}
 
+	cfg = &Config{}
 	dec := json.NewDecoder(file)
-	err = dec.Decode(&cfg)
+	err = dec.Decode(cfg)
 	if err != nil {
 		return
 	}
@@ -97,19 +102,25 @@ func LoadConfig() (cfg Config, err error) {
 		err = errConfig
 		return
 	}
+
 	if len(cfg.Emergency) == 0 {
-		fmt.Println("run without emergency, may be dangerous.")
+		Info.Printf("run without emergency, may be dangerous.")
 	}
+	cfg.EmergencySet = make(map[string]struct{}, 0)
+	for _, emerg := range cfg.Emergency {
+		cfg.EmergencySet[emerg] = struct{}{}
+	}
+
 	if cfg.Interval == 0 {
 		cfg.Interval = 30
 	}
 	return
 }
 
-func RenderTemplate(t string, raddr *net.UDPAddr) (s string, err error) {
+func RenderTemplate(t string, raddr *net.UDPAddr) (string, error) {
 	tmpl, err := template.New("t").Parse(t)
 	if err != nil {
-		return
+		return "", err
 	}
 
 	buf := bytes.NewBufferString("")
@@ -117,21 +128,10 @@ func RenderTemplate(t string, raddr *net.UDPAddr) (s string, err error) {
 	return buf.String(), nil
 }
 
-func RunCmd(s string) (err error) {
-	fmt.Printf("run: %s.\n", s)
+func RunCmd(s string) error {
+	Info.Printf("run: %s.", s)
 	cmd := exec.Command("/bin/sh", "-c", s)
 	return cmd.Run()
-}
-
-func FilterEmergency(token string) {
-	new_one := make([]string, 0)
-	for _, emerg := range cfg.Emergency {
-		if token != emerg {
-			new_one = append(new_one, emerg)
-		}
-	}
-	cfg.Emergency = new_one
-	return
 }
 
 func Verify(buf []byte) bool {
@@ -139,84 +139,92 @@ func Verify(buf []byte) bool {
 
 	token := string(buf)
 	token = strings.Trim(token, "\r\n")
-	fmt.Printf("begin verify: %s.\n", token)
+	Info.Printf("begin verify: %s.", token)
 	if totp.Verify(token) {
-		fmt.Println("verified by totp.")
+		Info.Printf("verified by totp.")
 		return true
 	}
-	for _, emerg := range cfg.Emergency {
-		if token == emerg {
-			FilterEmergency(token)
-			fmt.Println("verified by emergency, remember to change it.")
-			return true
-		}
+	if _, ok := cfg.EmergencySet[token]; ok {
+		delete(cfg.EmergencySet, token)
+		Info.Printf("verified by emergency, remember to change it.")
+		return true
 	}
-	fmt.Println("verify failed.")
+	Info.Printf("verify failed.")
 	return false
 }
 
 func TryOpenDoor(buf []byte, raddr *net.UDPAddr) {
-	fmt.Printf("got data from %s.\n", raddr.String())
+	Info.Printf("got data from %s.\n", raddr.String())
 	if !Verify(buf) {
 		return
 	}
 
 	OpenCmd, err := RenderTemplate(cfg.OpenCmd, raddr)
 	if err != nil {
-		fmt.Printf("open template Error: %s.\n", err.Error())
+		ErrLog.Printf("open template Error: %v.\n", err)
 		return
 	}
 
-	CloseCmd, err := RenderTemplate(cfg.CloseCmd, raddr)
-	if err != nil {
-		fmt.Printf("close template Error: %s.\n", err.Error())
-		return
+	var CloseCmd string
+	if cfg.CloseCmd == "" {
+		CloseCmd = ""
+	} else {
+		CloseCmd, err = RenderTemplate(cfg.CloseCmd, raddr)
+		if err != nil {
+			ErrLog.Printf("close template Error: %v.\n", err)
+			return
+		}
 	}
 
-	fmt.Printf("open door for %s.\n", raddr.String())
+	Info.Printf("open door for %s.\n", raddr.String())
 	err = RunCmd(OpenCmd)
 	if err != nil {
-		fmt.Printf("open exec Error: %s.\n", err.Error())
+		ErrLog.Printf("open exec Error: %v.\n", err)
+		return
+	}
+
+	if CloseCmd == "" {
+		Info.Printf("not close cmd.")
 		return
 	}
 
 	time.Sleep(time.Duration(cfg.Interval) * time.Second)
 
-	fmt.Printf("close door for %s.\n", raddr.String())
+	Info.Printf("close door for %s.\n", raddr.String())
 	err = RunCmd(CloseCmd)
 	if err != nil {
-		fmt.Printf("close exec Error: %s.\n", err.Error())
+		ErrLog.Printf("close exec Error: %v.\n", err)
 		return
 	}
 }
 
 func main() {
-	config, err := LoadConfig()
+	var err error
+	cfg, err = LoadConfig()
 	if err != nil {
-		fmt.Println(err.Error())
+		ErrLog.Printf("load config: %v", err)
 		return
 	}
-	cfg = &config
 
 	laddr, err := net.ResolveUDPAddr("udp", cfg.Addr)
 	if err != nil {
-		fmt.Println(err.Error())
+		ErrLog.Printf("resolve addr: %v", err)
 		return
 	}
 
 	sock, err := net.ListenUDP("udp", laddr)
 	if err != nil {
-		fmt.Println(err.Error())
+		ErrLog.Printf("listen: %v", err)
 		return
 	}
 	defer sock.Close()
 
-	fmt.Println("started.")
+	Info.Println("started.")
 	for {
 		buf := make([]byte, 65536)
 		n, raddr, err := sock.ReadFromUDP(buf)
 		if err != nil {
-			fmt.Println(err.Error())
+			ErrLog.Printf("read udp: %v", err)
 			continue
 		}
 
