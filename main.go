@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"html/template"
@@ -18,6 +19,12 @@ import (
 // CAUTION: DO NOT PROTECT SYSTEM FROM BLIND GUESS.
 // attacker could use that as DOS attack.
 // they can spoof their source IP address.
+
+var (
+	errPerm   = errors.New("config file should't read or write by others.")
+	errConfig = errors.New("config file wrong")
+)
+
 type Config struct {
 	Secret    string
 	Emergency []string
@@ -40,6 +47,17 @@ func LoadConfig() (cfg Config, err error) {
 	}
 	defer file.Close()
 
+	fi, err := file.Stat()
+	if err != nil {
+		return
+	}
+
+	fm := fi.Mode()
+	if (fm.Perm() & 0x3f) != 0 {
+		err = errPerm
+		return
+	}
+
 	dec := json.NewDecoder(file)
 	err = dec.Decode(&cfg)
 	if err != nil {
@@ -48,6 +66,16 @@ func LoadConfig() (cfg Config, err error) {
 
 	if cfg.Addr == "" {
 		cfg.Addr = ":37798"
+	}
+	if cfg.Secret == "" || cfg.OpenCmd == "" {
+		err = errConfig
+		return
+	}
+	if len(cfg.Emergency) == 0 {
+		fmt.Println("run without emergency, may be dangerous.")
+	}
+	if cfg.Interval == 0 {
+		cfg.Interval = 30
 	}
 	return
 }
@@ -69,7 +97,44 @@ func RunCmd(s string) (err error) {
 	return cmd.Run()
 }
 
-func OpenDoor(raddr *net.UDPAddr) {
+func FilterEmergency(token string) {
+	new_one := make([]string, 0)
+	for _, emerg := range cfg.Emergency {
+		if token != emerg {
+			new_one = append(new_one, emerg)
+		}
+	}
+	cfg.Emergency = new_one
+	return
+}
+
+func Verify(buf []byte) bool {
+	totp := &otp.TOTP{Secret: cfg.Secret, IsBase32Secret: true}
+
+	token := string(buf)
+	token = strings.Trim(token, "\r\n")
+	fmt.Printf("begin verify: %s.\n", token)
+	if totp.Verify(token) {
+		fmt.Println("verified by totp.")
+		return true
+	}
+	for _, emerg := range cfg.Emergency {
+		if token == emerg {
+			FilterEmergency(token)
+			fmt.Println("verified by emergency, remember to change it.")
+			return true
+		}
+	}
+	fmt.Println("verify failed.")
+	return false
+}
+
+func TryOpenDoor(buf []byte, raddr *net.UDPAddr) {
+	fmt.Printf("got data from %s.\n", raddr.String())
+	if !Verify(buf) {
+		return
+	}
+
 	OpenCmd, err := RenderTemplate(cfg.OpenCmd, raddr)
 	if err != nil {
 		fmt.Printf("open template Error: %s.\n", err.Error())
@@ -89,37 +154,24 @@ func OpenDoor(raddr *net.UDPAddr) {
 		return
 	}
 
-	go func() {
-		time.Sleep(time.Duration(cfg.Interval) * time.Second)
+	time.Sleep(time.Duration(cfg.Interval) * time.Second)
 
-		fmt.Printf("close door for %s.\n", raddr.String())
-		err := RunCmd(CloseCmd)
-		if err != nil {
-			fmt.Printf("close exec Error: %s.\n", err.Error())
-			return
-		}
-	}()
+	fmt.Printf("close door for %s.\n", raddr.String())
+	err = RunCmd(CloseCmd)
+	if err != nil {
+		fmt.Printf("close exec Error: %s.\n", err.Error())
+		return
+	}
 }
 
-func Verify(buf []byte, totp *otp.TOTP) bool {
-	token := string(buf)
-	token = strings.Trim(token, "\r\n")
-	fmt.Printf("begin verify: %s.\n", token)
-	if totp.Verify(token) {
-		fmt.Println("verified by totp.")
-		return true
+func main() {
+	config, err := LoadConfig()
+	if err != nil {
+		fmt.Println(err.Error())
+		return
 	}
-	for _, emerg := range cfg.Emergency {
-		if token == emerg {
-			fmt.Println("verified by emergency, remember to change it.")
-			return true
-		}
-	}
-	fmt.Println("verify failed.")
-	return false
-}
+	cfg = &config
 
-func Work() {
 	laddr, err := net.ResolveUDPAddr("udp", cfg.Addr)
 	if err != nil {
 		fmt.Println(err.Error())
@@ -133,30 +185,15 @@ func Work() {
 	}
 	defer sock.Close()
 
-	totp := &otp.TOTP{Secret: cfg.Secret, IsBase32Secret: true}
-	buf := make([]byte, 65536)
 	fmt.Println("started.")
 	for {
+		buf := make([]byte, 65536)
 		n, raddr, err := sock.ReadFromUDP(buf)
-		fmt.Printf("got data from %s.\n", raddr.String())
 		if err != nil {
 			fmt.Println(err.Error())
 			continue
 		}
 
-		if Verify(buf[:n], totp) {
-			OpenDoor(raddr)
-		}
+		go TryOpenDoor(buf[:n], raddr)
 	}
-}
-
-func main() {
-	config, err := LoadConfig()
-	if err != nil {
-		fmt.Println(err.Error())
-		return
-	}
-	cfg = &config
-
-	Work()
 }
