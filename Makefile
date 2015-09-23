@@ -10,8 +10,15 @@ build: ${TARGET}
 
 clean:
 	rm -f ${TARGET}
+	rm -f oksshc
 
 otpknock: main.go
 	go build -o $@ $^ 
+
+genotp:
+	python -c 'import imp; imp.load_source("okssh", "./okssh"); import okssh; print "%06d" % okssh.calotp("Y3WRZ5A533WCBPLX")'
+
+sendotp:
+	python -c 'import imp; imp.load_source("okssh", "./okssh"); import okssh; print "%06d" % okssh.calotp("Y3WRZ5A533WCBPLX")' | nc -u localhost 37798
 
 ### Makefile ends here
