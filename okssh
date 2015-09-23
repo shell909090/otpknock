@@ -1,0 +1,90 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+'''
+@date: 2015-09-23
+@author: Shell.Xu
+@copyright: 2015, Shell.Xu <shell909090@gmail.com>
+@license: BSD-3-clause
+'''
+import os
+import sys
+import time
+import hmac
+import base64
+import getopt
+import struct
+import socket
+import hashlib
+from os import path
+
+def calotp(secret):
+    secret = base64.b32decode(secret)
+    message = struct.pack('>Q', int(time.time() / 30))
+    h = hmac.new(secret, message, hashlib.sha1).digest()
+    offset = ord(h[-1]) & 0x0f
+    return struct.unpack('>I', h[offset: offset+4])[0] % 1000000
+
+def send_token(host, port, token):
+    print 'send token %s to %s:%d' % (token, host, port)
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.sendto(token, (host, port))
+    s.close()
+
+def split_empty(s, n):
+    r = s.split(' ', n)
+    if len(r) > 1:
+        return r
+    r = s.split('\t', n)
+    if len(r) > 1:
+        return r
+    return ('',) * (n + 1)
+
+def parse_config(thost, configpath='~/.ssh/config'):
+    configpath = path.expanduser(configpath)
+    host = ''
+    config = {}
+    with open(configpath) as cfgfile:
+        for line in cfgfile:
+            line = line.strip()
+
+            if line.startswith('#'): # comment
+                line = line.lstrip('# \t')
+                k, v = split_empty(line, 1)
+                if k.lower() == 'otp': # bingo
+                    config['otp'] = split_empty(line, 1)[1].strip()
+                elif k.lower() == 'otpport': # bingo 2
+                    config['otpport'] = split_empty(line, 1)[1].strip()
+
+            k, v = split_empty(line, 1)
+            if k.lower() == 'host':
+                if host == thost: # return when next host begin
+                    return host, config
+                host = v.strip()
+                config = {}
+            elif k.lower() == 'hostname':
+                config['hostname'] = v.strip()
+
+    if host == thost:
+        return host, config
+    return '', {}
+
+def main():
+    # parse opt, get host.
+    optlist, args = getopt.getopt(
+        sys.argv[1:], '1246AaCfgKkMNnqsTtVvXxYyb:c:D:E:e:F:I:i:L:l:m:O:o:p:Q:R:S:W:w:')
+    host = args[0]
+    if '@' in host:
+        host = host.rsplit('@', 1)[1]
+
+    # parse config, get hostname and secret.
+    host, config = parse_config(host)
+    if 'otp' in config:
+        send_token(config.get('hostname', host),
+                   int(config.get('otpport', '37798')),
+                   '%06d' % calotp(config['otp']))
+
+    # exec ssh as well
+    sys.argv[0] = 'ssh'
+    os.execvp('ssh', sys.argv)
+
+if __name__ == '__main__': main()
