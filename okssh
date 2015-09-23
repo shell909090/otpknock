@@ -22,7 +22,8 @@ def calotp(secret):
     message = struct.pack('>Q', int(time.time() / 30))
     h = hmac.new(secret, message, hashlib.sha1).digest()
     offset = ord(h[-1]) & 0x0f
-    return struct.unpack('>I', h[offset: offset+4])[0] % 1000000
+    number = struct.unpack('>I', h[offset: offset+4])[0]
+    return '%06d' % ((number & 0x7fffffff) % 1000000)
 
 def send_token(host, port, token):
     print 'send token %s to %s:%d' % (token, host, port)
@@ -79,9 +80,10 @@ def main():
     # parse config, get hostname and secret.
     host, config = parse_config(host)
     if 'otp' in config:
-        send_token(config.get('hostname', host),
-                   int(config.get('otpport', '37798')),
-                   '%06d' % calotp(config['otp']))
+        send_token(
+            config.get('hostname', host),
+            int(config.get('otpport', '37798')),
+            calotp(config['otp']))
 
     # exec ssh as well
     sys.argv[0] = 'ssh'

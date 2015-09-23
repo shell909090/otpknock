@@ -15,10 +15,13 @@ clean:
 otpknock: main.go
 	go build -o $@ $^ 
 
+run: otpknock
+	./otpknock -config otpknock.ini
+
 genotp:
-	python -c 'import imp; imp.load_source("okssh", "./okssh"); import okssh; print "%06d" % okssh.calotp("Y3WRZ5A533WCBPLX")'
+	python -c 'import imp; imp.load_source("okssh", "./okssh"); import okssh; print okssh.calotp("Y3WRZ5A533WCBPLX")'
 
 sendotp:
-	python -c 'import imp; imp.load_source("okssh", "./okssh"); import okssh; print "%06d" % okssh.calotp("Y3WRZ5A533WCBPLX")' | nc -u localhost 37798
+	python -c 'import imp; imp.load_source("okssh", "./okssh"); import okssh; okssh.send_token("localhost", 37798, okssh.calotp("Y3WRZ5A533WCBPLX"))'
 
 ### Makefile ends here
