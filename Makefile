@@ -9,8 +9,11 @@ TARGET=otpknock
 all: build
 
 install: otpknock
+	install -d $(DESTDIR)/usr/sbin/
 	install -m 755 -s otpknock $(DESTDIR)/usr/sbin/
+	install -d $(DESTDIR)/usr/bin/
 	install -m 755 okssh $(DESTDIR)/usr/bin/
+	install -d $(DESTDIR)/etc/
 	install -m 644 otpknock.ini $(DESTDIR)/etc/
 
 build: ${TARGET}
@@ -19,8 +22,9 @@ clean:
 	rm -f ${TARGET}
 	rm -f oksshc
 
+otpknock: export GOPATH=/home/shell/workspace/go
 otpknock: otpknock.go
-	go build -o $@ $^ 
+	go build -o $@ $^
 
 run: otpknock
 	./otpknock -config otpknock.ini
