@@ -22,7 +22,7 @@ export DH_GOPKG := github.com/shell909090/goproxy
 
 # main packaging script based on dh7 syntax
 %:
-	dh $@ --buildsystem=golang -with=golang
+	dh $@
 
 # debmake generated override targets
 # This is example for Cmake (See http://bugs.debian.org/641051 )
