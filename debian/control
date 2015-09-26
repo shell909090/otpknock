@@ -1,0 +1,15 @@
+Source: otpknock
+Section: net
+Priority: optional
+Maintainer: Shell.Xu <shell909090@gmail.com>
+Build-Depends: debhelper (>= 9)
+Standards-Version: 3.9.5
+Homepage: https://github.com/shell909090/otpknock
+#Vcs-Git: git://anonscm.debian.org/collab-maint/otpknock.git
+#Vcs-Browser: http://anonscm.debian.org/?p=collab-maint/otpknock.git;a=summary
+
+Package: otpknock
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Port knocking by otp auth
+ Port knocking daemon auth client by otp (google authentication).

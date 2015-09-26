@@ -6,13 +6,20 @@
 ## X-URL: 
 TARGET=otpknock
 
+all: build
+
+install: otpknock
+	install -m 755 -s otpknock $(DESTDIR)/usr/sbin/
+	install -m 755 okssh $(DESTDIR)/usr/bin/
+	install -m 644 otpknock.ini $(DESTDIR)/etc/
+
 build: ${TARGET}
 
 clean:
 	rm -f ${TARGET}
 	rm -f oksshc
 
-otpknock: main.go
+otpknock: otpknock.go
 	go build -o $@ $^ 
 
 run: otpknock
