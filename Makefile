@@ -22,7 +22,7 @@ clean:
 	rm -f ${TARGET}
 	rm -f oksshc
 
-otpknock: export GOPATH=/home/shell/workspace/go
+otpknock: export GOPATH=/home/shell/workspace/go:$GOPATH
 otpknock: otpknock.go
 	go build -o $@ $^
 
