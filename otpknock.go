@@ -47,7 +47,6 @@ import (
 // they can spoof their source IP address.
 
 var (
-	errPerm   = errors.New("config file should't read or write by others.")
 	errConfig = errors.New("config file wrong")
 
 	Info   = log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
@@ -82,10 +81,8 @@ func LoadConfig() (cfg *Config, err error) {
 		return
 	}
 
-	fm := fi.Mode()
-	if (fm.Perm() & 0x3f) != 0 {
-		err = errPerm
-		return
+	if (fi.Mode().Perm() & 0x3f) != 0 {
+		Info.Printf("config file should't read or write by others.")
 	}
 
 	cfg = &Config{}
@@ -118,7 +115,7 @@ func LoadConfig() (cfg *Config, err error) {
 }
 
 func RenderTemplate(t string, raddr *net.UDPAddr) (string, error) {
-	tmpl, err := template.New("t").Parse(t)
+	tmpl, err := template.New("").Parse(t)
 	if err != nil {
 		return "", err
 	}

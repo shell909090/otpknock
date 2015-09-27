@@ -19,6 +19,7 @@ DESC="otpknock"
 NAME=otpknock
 DAEMON=/usr/sbin/otpknock
 PIDFILE=/var/run/$NAME.pid
+LOGFILE=/var/log/$NAME.log
 SCRIPTNAME=/etc/init.d/$NAME
 
 # Exit if the package is not installed

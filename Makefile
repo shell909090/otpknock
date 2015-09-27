@@ -14,7 +14,7 @@ install: otpknock
 	install -d $(DESTDIR)/usr/bin/
 	install -m 755 okssh $(DESTDIR)/usr/bin/
 	install -d $(DESTDIR)/etc/
-	install -m 644 otpknock.ini $(DESTDIR)/etc/
+	install -m 600 otpknock.ini $(DESTDIR)/etc/otpknock.json
 
 build: ${TARGET}
 
