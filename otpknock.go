@@ -53,6 +53,7 @@ var (
 	errConfig = errors.New("config file wrong")
 
 	Info   = log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
+	Warn   = log.New(os.Stdout, "WARN: ", log.Ldate|log.Ltime|log.Lshortfile)
 	ErrLog = log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
 )
 
@@ -86,7 +87,7 @@ func LoadConfig() (cfg *Config, err error) {
 	}
 
 	if (fi.Mode().Perm() & 0x3f) != 0 {
-		Info.Printf("config file should't read or write by others.")
+		Warn.Printf("config file should't read or write by others.")
 	}
 
 	cfg = &Config{}
@@ -110,7 +111,7 @@ func LoadConfig() (cfg *Config, err error) {
 	}
 
 	if len(cfg.Emergency) == 0 {
-		Info.Printf("run without emergency, may be dangerous.")
+		Warn.Printf("run without emergency, may be dangerous.")
 	}
 	cfg.EmergencySet = make(map[string]struct{}, 0)
 	for _, emerg := range cfg.Emergency {
@@ -140,9 +141,9 @@ func RunCmd(s string) error {
 	return cmd.Run()
 }
 
-func Calotp(secret []byte, t time.Time) string {
+func Calotp(secret []byte, counter uint64) string {
 	message := make([]byte, 8)
-	binary.BigEndian.PutUint64(message, uint64(t.Unix())/30)
+	binary.BigEndian.PutUint64(message, counter)
 
 	h := hmac.New(sha1.New, secret)
 	h.Write(message)
@@ -154,9 +155,10 @@ func Calotp(secret []byte, t time.Time) string {
 }
 
 func VerifyToken(secret []byte, token string) bool {
-	for i := -1; i <= 1; i++ {
-		t := time.Now().Add(time.Duration(30*i) * time.Second)
-		if Calotp(secret, t) == token {
+	t := uint64(time.Now().Unix())/30 - 1
+	var i uint64
+	for i = 0; i <= 2; i++ {
+		if Calotp(secret, t+i) == token {
 			return true
 		}
 	}
@@ -175,7 +177,7 @@ func Verify(buf []byte) bool {
 
 	if _, ok := cfg.EmergencySet[token]; ok {
 		delete(cfg.EmergencySet, token)
-		Info.Printf("verified by emergency, remember to change it.")
+		Warn.Printf("verified by emergency, remember to change it.")
 		return true
 	}
 	Info.Printf("verify failed.")
@@ -213,7 +215,7 @@ func TryOpenDoor(buf []byte, raddr *net.UDPAddr) {
 	}
 
 	if CloseCmd == "" {
-		Info.Printf("not close cmd.")
+		Info.Printf("no close cmd.")
 		return
 	}
 
