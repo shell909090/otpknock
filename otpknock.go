@@ -28,9 +28,14 @@ package main
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha1"
+	"encoding/base32"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"html/template"
 	"log"
 	"net"
@@ -38,8 +43,6 @@ import (
 	"os/exec"
 	"strings"
 	"time"
-
-	otp "github.com/hgfischer/go-otp"
 )
 
 // CAUTION: DO NOT PROTECT SYSTEM FROM BLIND GUESS.
@@ -55,6 +58,7 @@ var (
 
 type Config struct {
 	Secret       string
+	SecretBin    []byte `json:"-"`
 	Emergency    []string
 	EmergencySet map[string]struct{} `json:"-"`
 	Addr         string
@@ -100,6 +104,11 @@ func LoadConfig() (cfg *Config, err error) {
 		return
 	}
 
+	cfg.SecretBin, err = base32.StdEncoding.DecodeString(cfg.Secret)
+	if err != nil {
+		return
+	}
+
 	if len(cfg.Emergency) == 0 {
 		Info.Printf("run without emergency, may be dangerous.")
 	}
@@ -131,16 +140,39 @@ func RunCmd(s string) error {
 	return cmd.Run()
 }
 
-func Verify(buf []byte) bool {
-	totp := &otp.TOTP{Secret: cfg.Secret, IsBase32Secret: true}
+func Calotp(secret []byte, t time.Time) string {
+	message := make([]byte, 8)
+	binary.BigEndian.PutUint64(message, uint64(t.Unix())/30)
 
+	h := hmac.New(sha1.New, secret)
+	h.Write(message)
+	hash := h.Sum(nil)
+
+	offset := int(hash[len(hash)-1] & 0xf)
+	bignum := (binary.BigEndian.Uint32(hash[offset:offset+4]) & 0x7fffffff)
+	return fmt.Sprintf("%06d", bignum%1000000)
+}
+
+func VerifyToken(secret []byte, token string) bool {
+	for i := -1; i <= 1; i++ {
+		t := time.Now().Add(time.Duration(30*i) * time.Second)
+		if Calotp(secret, t) == token {
+			return true
+		}
+	}
+	return false
+}
+
+func Verify(buf []byte) bool {
 	token := string(buf)
 	token = strings.Trim(token, "\r\n")
 	Info.Printf("begin verify: %s.", token)
-	if totp.Verify(token) {
+
+	if VerifyToken(cfg.SecretBin, token) {
 		Info.Printf("verified by totp.")
 		return true
 	}
+
 	if _, ok := cfg.EmergencySet[token]; ok {
 		delete(cfg.EmergencySet, token)
 		Info.Printf("verified by emergency, remember to change it.")
