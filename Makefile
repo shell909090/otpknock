@@ -21,9 +21,24 @@ build: ${TARGET}
 clean:
 	rm -f ${TARGET}
 	rm -f oksshc
+	rm -rf debuild
 
 otpknock: otpknock.go
 	go build -o $@ $^
+
+build-deb:
+	dpkg-buildpackage
+	mkdir -p debuild
+	mv -f ../otpknock_* debuild
+
+dk-build-deb:
+	docker run -it --rm -v $$PWD:/srv/ -w /srv/ gobuilder make build-deb
+	sudo chown -R shell:shell debuild/
+	mv debuild/*.deb ~/pkg/
+	docker run -it --rm -v $$PWD:/srv/ -w /srv/ i386/gobuilder make build-deb
+	sudo chown -R shell:shell debuild/
+	mv debuild/*.deb ~/pkg/
+	docker run -it --rm -v $$PWD:/srv/ -w /srv/ gobuilder debclean
 
 run: otpknock
 	./otpknock -config otpknock.ini
