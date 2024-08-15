@@ -105,7 +105,7 @@ func LoadConfig() (cfg *Config, err error) {
 		return
 	}
 
-	cfg.SecretBin, err = base32.StdEncoding.DecodeString(cfg.Secret)
+	cfg.SecretBin, err = base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(cfg.Secret)
 	if err != nil {
 		return
 	}
