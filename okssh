@@ -17,19 +17,22 @@ import socket
 import hashlib
 from os import path
 
+
 def calotp(secret):
     secret = base64.b32decode(secret)
     message = struct.pack('>Q', int(time.time() / 30))
     h = hmac.new(secret, message, hashlib.sha1).digest()
-    offset = ord(h[-1]) & 0x0f
+    offset = h[-1] & 0x0f
     number = struct.unpack('>I', h[offset: offset+4])[0]
     return '%06d' % ((number & 0x7fffffff) % 1000000)
 
+
 def send_token(host, port, token):
-    print 'send token %s to %s:%d' % (token, host, port)
+    print(f'send token {token} to {host}:{port}')
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.sendto(token, (host, port))
+    s.sendto(token.encode('utf-8'), (host, port))
     s.close()
+
 
 def split_empty(s, n):
     r = s.split(' ', n)
@@ -39,6 +42,7 @@ def split_empty(s, n):
     if len(r) > 1:
         return r
     return ('',) * (n + 1)
+
 
 def parse_config(thost, configpath='~/.ssh/config'):
     configpath = path.expanduser(configpath)
@@ -69,6 +73,7 @@ def parse_config(thost, configpath='~/.ssh/config'):
         return host, config
     return '', {}
 
+
 def main():
     # parse opt, get host.
     optlist, args = getopt.getopt(
@@ -89,4 +94,6 @@ def main():
     sys.argv[0] = 'ssh'
     os.execvp('ssh', sys.argv)
 
-if __name__ == '__main__': main()
+
+if __name__ == '__main__':
+    main()

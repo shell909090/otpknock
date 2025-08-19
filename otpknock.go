@@ -141,6 +141,42 @@ func RunCmd(s string) error {
 	return cmd.Run()
 }
 
+func TryOpenDoor(raddr *net.UDPAddr) {
+	OpenCmd, err := RenderTemplate(cfg.OpenCmd, raddr)
+	if err != nil {
+		ErrLog.Printf("open template Error: %v.\n", err)
+		return
+	}
+
+	Info.Printf("open door for %s.\n", raddr.String())
+	err = RunCmd(OpenCmd)
+	if err != nil {
+		ErrLog.Printf("open exec Error: %v.\n", err)
+		return
+	}
+
+	if cfg.CloseCmd == "" {
+		Info.Printf("no close cmd.")
+		return
+	}
+
+	time.Sleep(time.Duration(cfg.Interval) * time.Second)
+
+	CloseCmd, err := RenderTemplate(cfg.CloseCmd, raddr)
+	if err != nil {
+		ErrLog.Printf("close template Error: %v.\n", err)
+		return
+	}
+
+	Info.Printf("close door for %s.\n", raddr.String())
+	err = RunCmd(CloseCmd)
+	if err != nil {
+		ErrLog.Printf("close exec Error: %v.\n", err)
+		return
+	}
+	return
+}
+
 func Calotp(secret []byte, counter uint64) string {
 	message := make([]byte, 8)
 	binary.BigEndian.PutUint64(message, counter)
@@ -177,56 +213,11 @@ func Verify(buf []byte) bool {
 
 	if _, ok := cfg.EmergencySet[token]; ok {
 		delete(cfg.EmergencySet, token)
-		Warn.Printf("verified by emergency, remember to change it.")
+		Warn.Printf("verified by emergency, don't forget to rotate it.")
 		return true
 	}
 	Info.Printf("verify failed.")
 	return false
-}
-
-func TryOpenDoor(buf []byte, raddr *net.UDPAddr) {
-	Info.Printf("got data from %s.\n", raddr.String())
-	if !Verify(buf) {
-		return
-	}
-
-	OpenCmd, err := RenderTemplate(cfg.OpenCmd, raddr)
-	if err != nil {
-		ErrLog.Printf("open template Error: %v.\n", err)
-		return
-	}
-
-	var CloseCmd string
-	if cfg.CloseCmd == "" {
-		CloseCmd = ""
-	} else {
-		CloseCmd, err = RenderTemplate(cfg.CloseCmd, raddr)
-		if err != nil {
-			ErrLog.Printf("close template Error: %v.\n", err)
-			return
-		}
-	}
-
-	Info.Printf("open door for %s.\n", raddr.String())
-	err = RunCmd(OpenCmd)
-	if err != nil {
-		ErrLog.Printf("open exec Error: %v.\n", err)
-		return
-	}
-
-	if CloseCmd == "" {
-		Info.Printf("no close cmd.")
-		return
-	}
-
-	time.Sleep(time.Duration(cfg.Interval) * time.Second)
-
-	Info.Printf("close door for %s.\n", raddr.String())
-	err = RunCmd(CloseCmd)
-	if err != nil {
-		ErrLog.Printf("close exec Error: %v.\n", err)
-		return
-	}
 }
 
 func main() {
@@ -251,14 +242,19 @@ func main() {
 	defer sock.Close()
 
 	Info.Println("started.")
+	buf := make([]byte, 65536)
 	for {
-		buf := make([]byte, 65536)
 		n, raddr, err := sock.ReadFromUDP(buf)
 		if err != nil {
 			ErrLog.Printf("read udp: %v", err)
 			continue
 		}
 
-		go TryOpenDoor(buf[:n], raddr)
+		Info.Printf("got data from %s.\n", raddr.String())
+		if !Verify(buf[:n]) {
+			continue
+		}
+
+		go TryOpenDoor(raddr)
 	}
 }

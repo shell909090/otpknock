@@ -14,7 +14,7 @@ install: otpknock
 	install -d $(DESTDIR)/usr/bin/
 	install -m 755 okssh $(DESTDIR)/usr/bin/
 	install -d $(DESTDIR)/etc/
-	install -m 600 otpknock.ini $(DESTDIR)/etc/otpknock.json
+	install -m 600 otpknock.json $(DESTDIR)/etc/
 
 build: ${TARGET}
 
@@ -24,7 +24,7 @@ clean:
 	rm -rf debuild
 
 otpknock: otpknock.go
-	go build -o $@ $^
+	go build -ldflags "-s" -o $@ $^
 
 build-deb:
 	dpkg-buildpackage
@@ -41,12 +41,12 @@ dk-build-deb:
 	docker run -it --rm -v $$PWD:/srv/ -w /srv/ gobuilder debclean
 
 run: otpknock
-	./otpknock -config otpknock.ini
+	./otpknock -config otpknock.json
 
 genotp:
-	python -c 'import imp; imp.load_source("okssh", "./okssh"); import okssh; print okssh.calotp("Y3WRZ5A533WCBPLX")'
+	python3 -c '__name__=""; exec(open("okssh").read(), globals()); print(calotp("Y3WRZ5A533WCBPLX"))'
 
 sendotp:
-	python -c 'import imp; imp.load_source("okssh", "./okssh"); import okssh; okssh.send_token("localhost", 37798, okssh.calotp("Y3WRZ5A533WCBPLX"))'
+	python3 -c '__name__=""; exec(open("okssh").read(), globals()); send_token("localhost", 37798, calotp("Y3WRZ5A533WCBPLX"))'
 
 ### Makefile ends here
