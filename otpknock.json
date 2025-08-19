@@ -1,11 +1,11 @@
 {
-	"Secret": "Y3WRZ5A533WCBPLX",
-	"Emergency": [
-		     "88342056",
-		     "12213342"
-	],
-	"Addr": ":37798",
-	"OpenCmd": "sudo iptables -A INPUT -s {{.IP}} -p tcp -m tcp --dport 22 -j ACCEPT",
-	"CloseCmd": "sudo iptables -D INPUT -s {{.IP}} -p tcp -m tcp --dport 22 -j ACCEPT",
-	"Interval": 30
+  "Secret": "Y3WRZ5A533WCBPLX",
+  "Emergency": [
+    "88342056",
+    "12213342"
+  ],
+  "Addr": ":37798",
+  "OpenCmd": "sudo iptables -A INPUT -s {{.IP}} -p tcp -m tcp --dport 22 -j ACCEPT",
+  "CloseCmd": "sudo iptables -D INPUT -s {{.IP}} -p tcp -m tcp --dport 22 -j ACCEPT",
+  "Interval": 30
 }

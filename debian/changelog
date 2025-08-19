@@ -1,3 +1,10 @@
+otpknock (0.5) unstable; urgency=medium
+
+  * port okssh to match python3.
+  * split OTP verification out of opendoor.
+
+ -- Shell.Xu <shell909090@gmail.com>  Tue, 19 Aug 2025 11:55:57 +0800
+
 otpknock (0.4-1) unstable; urgency=medium
 
   * Upgrade build system.

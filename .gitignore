@@ -4,3 +4,7 @@ otpknock.deb
 otpknock.tar.gz
 oksshc
 __pycache__
+debian/debhelper-build-stamp
+debian/files
+debian/otpknock.postrm.debhelper
+debian/otpknock.substvars

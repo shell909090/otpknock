@@ -19,15 +19,17 @@ install: otpknock
 build: ${TARGET}
 
 clean:
-	rm -f ${TARGET}
-	rm -f oksshc
+	rm -f ${TARGET} oksshc
 	rm -rf debuild
+
+clean-deb:
+	debian/rules clean
 
 otpknock: otpknock.go
 	go build -ldflags "-s" -o $@ $^
 
 build-deb:
-	dpkg-buildpackage
+	dpkg-buildpackage --no-sign
 	mkdir -p debuild
 	mv -f ../otpknock_* debuild
 
