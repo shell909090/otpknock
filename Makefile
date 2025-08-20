@@ -33,14 +33,13 @@ build-deb:
 	mkdir -p debuild
 	mv -f ../otpknock_* debuild
 
-dk-build-deb:
+dk-build:
 	docker run -it --rm -v $$PWD:/srv/ -w /srv/ gobuilder make build-deb
 	sudo chown -R shell:shell debuild/
-	mv debuild/*.deb ~/pkg/
+
+dk-build32:
 	docker run -it --rm -v $$PWD:/srv/ -w /srv/ i386/gobuilder make build-deb
 	sudo chown -R shell:shell debuild/
-	mv debuild/*.deb ~/pkg/
-	docker run -it --rm -v $$PWD:/srv/ -w /srv/ gobuilder debclean
 
 run: otpknock
 	./otpknock -config otpknock.json
