@@ -71,6 +71,67 @@ type Config struct {
 
 var cfg *Config = nil
 
+// IPTracker tracks failed attempts and blacklist
+type IPTracker struct {
+	attempts  map[string]time.Time // IP -> first failure expiry time
+	blacklist map[string]time.Time // IP -> blacklist expiry time
+}
+
+var tracker = &IPTracker{
+	attempts:  make(map[string]time.Time),
+	blacklist: make(map[string]time.Time),
+}
+
+const (
+	failureWindow = 10 * time.Minute
+	banDuration   = 10 * time.Minute
+)
+
+// Cleanup removes expired entries
+func (t *IPTracker) Cleanup() {
+	now := time.Now()
+
+	for ip, expiry := range t.blacklist {
+		if now.After(expiry) {
+			delete(t.blacklist, ip)
+		}
+	}
+
+	for ip, expiry := range t.attempts {
+		if now.After(expiry) {
+			delete(t.attempts, ip)
+		}
+	}
+}
+
+// IsBlacklisted checks if an IP is currently blacklisted
+func (t *IPTracker) IsBlacklisted(ip string) bool {
+	_, exists := t.blacklist[ip]
+	return exists
+}
+
+// RecordFailure records a failed verification attempt
+func (t *IPTracker) RecordFailure(ip string) {
+	now := time.Now()
+
+	// Check if already has one failure
+	if _, exists := t.attempts[ip]; exists {
+		// Second failure -> blacklist
+		t.blacklist[ip] = now.Add(banDuration)
+		delete(t.attempts, ip)
+		Warn.Printf("IP %s blacklisted for %v after 2 failures.", ip, banDuration)
+		return
+	}
+
+	// First failure
+	t.attempts[ip] = now.Add(failureWindow)
+}
+
+// RecordSuccess clears failure history for an IP
+func (t *IPTracker) RecordSuccess(ip string) {
+	delete(t.attempts, ip)
+}
+
 func LoadConfig() (cfg *Config, err error) {
 	var configfile string
 	flag.StringVar(&configfile, "config", "/etc/otpknock.json", "config file")
@@ -269,11 +330,26 @@ func main() {
 			continue
 		}
 
+		ip := raddr.IP.String()
 		Info.Printf("got data from %s.\n", raddr.String())
-		if !Verify(buf[:n]) {
+
+		// Cleanup expired entries once per packet
+		tracker.Cleanup()
+
+		// Check if IP is blacklisted
+		if tracker.IsBlacklisted(ip) {
+			Warn.Printf("IP %s is blacklisted, ignoring request.", ip)
 			continue
 		}
 
+		// Verify token
+		if !Verify(buf[:n]) {
+			tracker.RecordFailure(ip)
+			continue
+		}
+
+		// Success: clear failure history
+		tracker.RecordSuccess(ip)
 		go TryOpenDoor(raddr)
 	}
 }
