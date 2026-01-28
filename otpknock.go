@@ -28,6 +28,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha1"
 	"encoding/base32"
@@ -199,8 +200,18 @@ func RenderTemplate(t string, raddr *net.UDPAddr) (string, error) {
 
 func RunCmd(s string) error {
 	Info.Printf("run: %s.", s)
-	cmd := exec.Command("/bin/sh", "-c", s)
-	return cmd.Run()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", s)
+	err := cmd.Run()
+
+	if ctx.Err() == context.DeadlineExceeded {
+		ErrLog.Printf("command timeout: %s", s)
+		return ctx.Err()
+	}
+
+	return err
 }
 
 func TryOpenDoor(raddr *net.UDPAddr) {
