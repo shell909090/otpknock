@@ -47,9 +47,21 @@ import (
 	"time"
 )
 
-// CAUTION: DO NOT PROTECT SYSTEM FROM BLIND GUESS.
-// attacker could use that as DOS attack.
-// they can spoof their source IP address.
+// 注意：当前黑名单机制无法完全防止 DOS 攻击。
+// 由于 UDP 协议允许伪造源 IP 地址，攻击者可以：
+// 1. 伪造大量不同的源 IP 发送无效 OTP
+// 2. 每个伪造 IP 可尝试 2 次后被封禁
+// 3. 通过轮换伪造 IP 持续消耗服务器资源
+//
+// 但是，攻击者无法利用伪造 IP 获得实际访问权限，因为：
+// - Port knocking 只打开防火墙规则
+// - 后续 SSH 连接需要 TCP 三次握手
+// - TCP 连接必须使用真实 IP 才能完成握手
+//
+// 因此黑名单机制仍然有效防护：
+// - 防止真实 IP 的暴力破解攻击
+// - 减少大部分无效请求的处理开销（输入格式验证）
+// - 记录可疑 IP 便于事后分析
 
 var (
 	errConfig = errors.New("config file wrong")
@@ -274,6 +286,10 @@ func VerifyToken(secret []byte, token string) bool {
 	return false
 }
 
+// Verify 验证 token 是否有效，接受 6-8 位数字：
+// - TOTP token 固定为 6 位（由 Calotp 函数生成，符合 RFC 6238 标准）
+// - Emergency codes 可以是 6-8 位（用户在配置文件中自定义，位数越多越安全）
+// 函数同时处理这两种验证方式，因此接受 6-8 位范围
 func Verify(buf []byte) bool {
 	// 先检查原始长度，考虑可能有换行符，但太长就没必要继续了
 	if len(buf) < 6 || len(buf) > 10 {
