@@ -19,7 +19,11 @@ from os import path
 
 
 def calotp(secret):
-    secret = base64.b32decode(secret)
+    try:
+        secret = base64.b32decode(secret)
+    except Exception as e:
+        print(f'Error: Invalid base32 secret: {e}', file=sys.stderr)
+        raise
     message = struct.pack('>Q', int(time.time() / 30))
     h = hmac.new(secret, message, hashlib.sha1).digest()
     offset = h[-1] & 0x0f
@@ -29,9 +33,16 @@ def calotp(secret):
 
 def send_token(host, port, token):
     print(f'send token {token} to {host}:{port}')
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.sendto(token.encode('utf-8'), (host, port))
-    s.close()
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.sendto(token.encode('utf-8'), (host, port))
+        s.close()
+    except socket.gaierror as e:
+        print(f'Error: Cannot resolve hostname {host}: {e}', file=sys.stderr)
+        raise
+    except Exception as e:
+        print(f'Error: Failed to send token: {e}', file=sys.stderr)
+        raise
 
 
 def split_empty(s, n):
@@ -48,7 +59,17 @@ def parse_config(thost, configpath='~/.ssh/config'):
     configpath = path.expanduser(configpath)
     host = ''
     config = {}
-    with open(configpath) as cfgfile:
+
+    try:
+        cfgfile = open(configpath)
+    except FileNotFoundError:
+        print(f'Warning: Config file {configpath} not found, skipping OTP knock', file=sys.stderr)
+        return '', {}
+    except PermissionError:
+        print(f'Warning: Cannot read {configpath}, skipping OTP knock', file=sys.stderr)
+        return '', {}
+
+    try:
         for line in cfgfile:
             line = line.strip()
 
@@ -69,30 +90,56 @@ def parse_config(thost, configpath='~/.ssh/config'):
             elif k.lower() == 'hostname':
                 config['hostname'] = v.strip()
 
-    if host == thost:
-        return host, config
-    return '', {}
+        if host == thost:
+            return host, config
+        return '', {}
+    finally:
+        cfgfile.close()
 
 
 def main():
-    # parse opt, get host.
-    optlist, args = getopt.getopt(
-        sys.argv[1:], '1246AaCfgKkMNnqsTtVvXxYyb:c:D:E:e:F:I:i:L:l:m:O:o:p:Q:R:S:W:w:')
-    host = args[0]
-    if '@' in host:
-        host = host.rsplit('@', 1)[1]
+    try:
+        # parse opt, get host.
+        optlist, args = getopt.getopt(
+            sys.argv[1:], '1246AaCfgKkMNnqsTtVvXxYyb:c:D:E:e:F:I:i:L:l:m:O:o:p:Q:R:S:W:w:')
 
-    # parse config, get hostname and secret.
-    host, config = parse_config(host)
-    if 'otp' in config:
-        send_token(
-            config.get('hostname', host),
-            int(config.get('otpport', '37798')),
-            calotp(config['otp']))
+        if not args:
+            print('Error: Missing hostname argument', file=sys.stderr)
+            print('Usage: okssh [ssh-options] hostname', file=sys.stderr)
+            sys.exit(1)
 
-    # exec ssh as well
-    sys.argv[0] = 'ssh'
-    os.execvp('ssh', sys.argv)
+        host = args[0]
+        if '@' in host:
+            host = host.rsplit('@', 1)[1]
+
+        # parse config, get hostname and secret.
+        host, config = parse_config(host)
+
+        if 'otp' in config:
+            try:
+                token = calotp(config['otp'])
+                send_token(
+                    config.get('hostname', host),
+                    int(config.get('otpport', '37798')),
+                    token)
+                print(f'OTP knock sent successfully', file=sys.stderr)
+            except Exception as e:
+                print(f'Warning: OTP knock failed: {e}', file=sys.stderr)
+                print('Continuing with SSH connection anyway...', file=sys.stderr)
+
+        # exec ssh as well
+        sys.argv[0] = 'ssh'
+        os.execvp('ssh', sys.argv)
+
+    except getopt.GetoptError as e:
+        print(f'Error: Invalid option: {e}', file=sys.stderr)
+        sys.exit(1)
+    except KeyboardInterrupt:
+        print('\nInterrupted by user', file=sys.stderr)
+        sys.exit(130)
+    except Exception as e:
+        print(f'Error: {e}', file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == '__main__':
