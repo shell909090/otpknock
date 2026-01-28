@@ -10,6 +10,10 @@ port knocking by otp
 5. `go get github.com/hgfischer/go-otp`
 6. run main.go. (maybe compile first)
 
+# security notes
+
+- Emergency codes are not persisted after use. After using any emergency code, rotate the entire emergency code list. A service restart will re-enable any codes still present in the config.
+
 # how it works
 
 1. listening on a udp port. (addr in config)

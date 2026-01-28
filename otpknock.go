@@ -98,6 +98,7 @@ var tracker = &IPTracker{
 const (
 	failureWindow = 10 * time.Minute
 	banDuration   = 10 * time.Minute
+	maxTrackerEntries = 128
 )
 
 // Cleanup removes expired entries
@@ -130,19 +131,27 @@ func (t *IPTracker) RecordFailure(ip string) {
 	// Check if already has one failure
 	if _, exists := t.attempts[ip]; exists {
 		// Second failure -> blacklist
-		t.blacklist[ip] = now.Add(banDuration)
-		delete(t.attempts, ip)
-		Warn.Printf("IP %s blacklisted for %v after 2 failures.", ip, banDuration)
+		if t.hasCapacity(t.blacklist) {
+			t.blacklist[ip] = now.Add(banDuration)
+			delete(t.attempts, ip)
+			Warn.Printf("IP %s blacklisted for %v after 2 failures.", ip, banDuration)
+		}
 		return
 	}
 
 	// First failure
-	t.attempts[ip] = now.Add(failureWindow)
+	if t.hasCapacity(t.attempts) {
+		t.attempts[ip] = now.Add(failureWindow)
+	}
 }
 
 // RecordSuccess clears failure history for an IP
 func (t *IPTracker) RecordSuccess(ip string) {
 	delete(t.attempts, ip)
+}
+
+func (t *IPTracker) hasCapacity(m map[string]time.Time) bool {
+	return len(m) < maxTrackerEntries
 }
 
 func LoadConfig() (cfg *Config, err error) {
@@ -312,7 +321,7 @@ func Verify(buf []byte) bool {
 		return false
 	}
 
-	Info.Printf("begin verify: %s.", token)
+	Info.Printf("begin verify.")
 	if VerifyToken(cfg.SecretBin, token) {
 		Info.Printf("verified by totp.")
 		return true
@@ -323,7 +332,7 @@ func Verify(buf []byte) bool {
 		Warn.Printf("verified by emergency, don't forget to rotate it.")
 		return true
 	}
-	Info.Printf("verify failed.")
+	Info.Printf("verify failed: %s.", token)
 	return false
 }
 
