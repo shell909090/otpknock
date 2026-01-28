@@ -1,3 +1,12 @@
+otpknock (0.6) unstable; urgency=medium
+
+  * optimize Verify: validate input format before OTP check.
+  * add IP blacklist: ban for 10min after 2 failures in 10min.
+  * add 30s timeout for command execution.
+  * add blacklist size limit, don't record token when successed.
+
+ -- Shell.Xu <shell909090@gmail.com>  Thu, 29 Jan 2026 00:29:12 +0800
+
 otpknock (0.5) unstable; urgency=medium
 
   * port okssh to match python3.
