@@ -41,6 +41,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -202,10 +203,28 @@ func VerifyToken(secret []byte, token string) bool {
 }
 
 func Verify(buf []byte) bool {
+	// 先检查原始长度，考虑可能有换行符，但太长就没必要继续了
+	if len(buf) < 6 || len(buf) > 10 {
+		Info.Printf("verify failed: raw data length %d out of reasonable range.", len(buf))
+		return false
+	}
+
 	token := string(buf)
 	token = strings.Trim(token, "\r\n")
-	Info.Printf("begin verify: %s.", token)
 
+	// 检查trim后长度是否在6-8位之间
+	if len(token) < 6 || len(token) > 8 {
+		Info.Printf("verify failed: token length %d is not in range [6,8].", len(token))
+		return false
+	}
+
+	// 使用strconv检查是否全部为数字
+	if _, err := strconv.Atoi(token); err != nil {
+		Info.Printf("verify failed: token is not a valid number.")
+		return false
+	}
+
+	Info.Printf("begin verify: %s.", token)
 	if VerifyToken(cfg.SecretBin, token) {
 		Info.Printf("verified by totp.")
 		return true
