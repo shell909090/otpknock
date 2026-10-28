@@ -10,6 +10,6 @@ Homepage: https://github.com/shell909090/otpknock
 
 Package: otpknock
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}, python3
 Description: Port knocking by otp auth
  Port knocking daemon auth client by otp (google authentication).
